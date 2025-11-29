@@ -1,48 +1,59 @@
 #!/usr/bin/env bash
 
-# Démarre un serveur de développement capable de servir des fichiers JSX/JS (Vite via npx).
+# Démarre le serveur Node.js (back-end) sur 3001 et le serveur Vite (front-end) sur 3000.
 
 set -e
 
-PORT=${PORT:-5173}
-HOST=${HOST:-127.0.0.1}
-PID_FILE=".dev_server.pid"
+# --- Configuration des ports et fichiers PID ---
 
-echo "🔧 Démarrage du serveur JS/JSX (Vite) sur http://$HOST:$PORT"
+FRONT_PORT=${FRONT_PORT:-3000} 
+FRONT_HOST=${FRONT_HOST:-0.0.0.0} # Utilisation de 0.0.0.0 pour Codespaces
+FRONT_PID_FILE=".dev_server_front.pid"
 
-# Vérifie la présence de node
-if ! command -v node >/dev/null 2>&1; then
-	echo "❌ Node.js n'est pas installé. Installez Node.js pour continuer."
-	exit 1
-fi
+BACK_PORT=3001
+BACK_PID_FILE=".dev_server_back.pid"
 
-# Vérifie la présence de npx
-if ! command -v npx >/dev/null 2>&1; then
-	echo "❌ npx (npm) n'est pas disponible. Installez npm pour continuer."
-	exit 1
-fi
+# --- Fonction de nettoyage et vérification ---
+cleanup_pid() {
+    local PID_FILE=$1
+	    local PROCESS_NAME=$2
+		    if [ -f "$PID_FILE" ]; then
+			        PID_EXIST=$(cat "$PID_FILE" 2>/dev/null || echo "")
+					        if [ -n "$PID_EXIST" ] && kill -0 "$PID_EXIST" >/dev/null 2>&1; then
+							            echo "!!  $PROCESS_NAME (PID $PID_EXIST) déjà en cours. Veuillez utiliser './stop.sh' d'abord." 
+										            exit 1
+													        else
+															            rm -f "$PID_FILE"
+																		        fi
+																				    fi
+																					}
 
-# Si un serveur est déjà lancé, refuse de démarrer un second
-if [ -f "$PID_FILE" ]; then
-	PID_EXIST=$(cat "$PID_FILE" 2>/dev/null || echo "")
-	if [ -n "$PID_EXIST" ] && kill -0 "$PID_EXIST" >/dev/null 2>&1; then
-		echo "⚠️  Un serveur est déjà en cours (PID $PID_EXIST). Arrêtez-le d'abord ou supprimez $PID_FILE." 
-		exit 1
-	else
-		rm -f "$PID_FILE"
-	fi
-fi
+																					cleanup_pid "$FRONT_PID_FILE" "Serveur Front (Vite)"
+																					cleanup_pid "$BACK_PID_FILE" "Serveur Back (Node.js)"
 
-# Lance Vite via npx (téléchargera et exécutera si nécessaire). Le serveur tourne en tâche de fond.
-# Utilise --host pour être accessible depuis l'hôte si besoin.
-nohup npx vite --port "$PORT" --host "$HOST" >/dev/null 2>&1 &
-DEV_PID=$!
 
-# Sauvegarde le PID pour le stop
-echo $DEV_PID > "$PID_FILE"
+																					# --- Lancement du Serveur Node.js (Back-end) sur 3001 ---
 
-echo "✅ Serveur lancé (PID $DEV_PID). Accède à: http://$HOST:$PORT"
-echo "ℹ️  Pour arrêter: ./stop.sh"
+																					echo "🚀 Démarrage du Serveur Node.js (Back-end) sur 0.0.0.0:$BACK_PORT"
+																					# Lance le serveur Node.js et stocke son PID
+																					nohup node server/index.js > backend_output.log 2>&1 &
+																					BACK_PID=$!
+																					echo $BACK_PID > "$BACK_PID_FILE"
+																					sleep 2 
 
-exit 0
+																					echo " Serveur Back lancé (PID $BACK_PID). Vérifiez backend_output.log."
 
+
+																					# --- Lancement du Serveur Vite (Front-end) sur 3000 ---
+
+																					echo "🚀 Démarrage du Serveur JS/JSX (Vite) sur $FRONT_HOST:$FRONT_PORT"
+																					# Lance Vite sur le port 3000
+																					nohup npx vite --port "$FRONT_PORT" --host "$FRONT_HOST" >/dev/null 2>&1 &
+																					FRONT_PID=$!
+
+																					echo $FRONT_PID > "$FRONT_PID_FILE"
+
+																					echo " Serveur Front lancé (PID $FRONT_PID). Accès à: http://$HOST:$FRONT_PORT"
+																					echo "ℹ  Pour arrêter les deux serveurs: ./stop.sh"
+
+																					exit 0
